@@ -166,6 +166,12 @@ python scripts/latency_benchmark.py
 python scripts/plot_latency.py
 ```
 
+## GitHub Pages (public flow + outputs)
+
+This repo ships a tiny static site in `docs/` that shows the system flow diagrams and the benchmark outputs.
+
+- https://chandu1234678.github.io/AUVBrain/
+
 ## Configuration
 
 See the complete list of environment variables in .env.example.
