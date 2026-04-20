@@ -68,6 +68,47 @@ pre.mermaid {
   background: #fafafa;
 }
 
+.flow {
+  margin: 10px 0 0 0;
+  padding: 14px;
+  border: 1px solid #e6e6e6;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
+.flow-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
+
+.flow-row:last-child {
+  margin-bottom: 0;
+}
+
+.node {
+  border: 1px solid #e6e6e6;
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #fff;
+  font-size: 0.95rem;
+}
+
+.arrow {
+  color: #555;
+  font-weight: 600;
+}
+
+.steps {
+  margin: 10px 0 0 0;
+  padding: 14px 14px 14px 34px;
+  border: 1px solid #e6e6e6;
+  border-radius: 10px;
+  background: #fafafa;
+}
+
 pre.code {
   margin: 10px 0 0 0;
   padding: 14px;

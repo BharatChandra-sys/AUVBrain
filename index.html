@@ -13,7 +13,6 @@
     <base href="docs/" />
 
     <link rel="stylesheet" href="style.css" />
-    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js"></script>
   </head>
   <body>
     <header class="container">
@@ -35,36 +34,49 @@
           apply safety constraints, mix thrusters, and emit telemetry asynchronously.
         </p>
 
-        <pre class="mermaid">
-flowchart LR
-  Sensors[Sensors and State] --> Loop[Agent Loop] --> Policy[Policy] --> Safety[Safety Monitor] --> Control[PID + Mixing] --> Thrusters[Thrusters]
-  Manual[Manual Override] --> API[FastAPI + WebSocket] --> Loop
-  Loop --> Tel[Telemetry Writer] --> Log[Telemetry Log]
-      </pre>
+        <div class="flow" role="img" aria-label="AUVBrain system data flow">
+          <div class="flow-row">
+            <div class="node">Sensors / State</div>
+            <div class="arrow">→</div>
+            <div class="node">Agent Loop</div>
+            <div class="arrow">→</div>
+            <div class="node">Policy (Rules / LLM)</div>
+            <div class="arrow">→</div>
+            <div class="node">Safety Monitor</div>
+            <div class="arrow">→</div>
+            <div class="node">PID + Mixing</div>
+            <div class="arrow">→</div>
+            <div class="node">Thrusters</div>
+          </div>
+
+          <div class="flow-row">
+            <div class="node">Manual Override</div>
+            <div class="arrow">→</div>
+            <div class="node">FastAPI + WebSocket</div>
+            <div class="arrow">→</div>
+            <div class="node">Agent Loop</div>
+          </div>
+
+          <div class="flow-row">
+            <div class="node">Agent Loop</div>
+            <div class="arrow">→</div>
+            <div class="node">Telemetry Writer</div>
+            <div class="arrow">→</div>
+            <div class="node">Telemetry Log (JSONL)</div>
+          </div>
+        </div>
       </section>
 
       <section>
         <h2>Tick (Decision) Flow</h2>
-        <pre class="mermaid">
-sequenceDiagram
-  autonumber
-  participant Loop as Agent Loop
-  participant HW as Hardware
-  participant Policy as Policy
-  participant Safety as Safety Monitor
-  participant Control as Control
-  participant Tel as Telemetry
-
-  Loop->>HW: Read sensors
-  Loop->>Policy: decide command (timeout + fallback)
-  Policy-->>Loop: VehicleCommand
-  Loop->>Safety: Validate and clip
-  Safety-->>Loop: Safe command
-  Loop->>Control: Mix thrusters
-  Control-->>Loop: Outputs
-  Loop->>HW: Write actuators
-  Loop->>Tel: Enqueue telemetry (async)
-</pre>
+        <ol class="steps">
+          <li>Read sensors/state (bounded timeout).</li>
+          <li>Decide a command (Rules or LLM; timeout + fallback if enabled).</li>
+          <li>Safety monitor validates/clips, and can force SAFE.</li>
+          <li>Control computes thrust and mixes to 4-motor outputs.</li>
+          <li>Write actuators (bounded timeout).</li>
+          <li>Enqueue telemetry (non-blocking) and sleep to maintain cadence.</li>
+        </ol>
       </section>
 
       <section>
@@ -97,8 +109,5 @@ python -m scripts.plot_latency</pre>
       <p class="muted">Rendered with Mermaid. Hosted via GitHub Pages.</p>
     </footer>
 
-    <script>
-      mermaid.initialize({ startOnLoad: true, theme: "default" });
-    </script>
   </body>
 </html>
