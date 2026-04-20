@@ -94,11 +94,16 @@ pre.mermaid {
   padding: 6px 10px;
   background: #fff;
   font-size: 0.95rem;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
 }
 
-.arrow {
+.flow-row .node:not(:last-child)::after {
+  content: "→";
   color: #555;
   font-weight: 600;
+  margin-left: 10px;
 }
 
 .steps {

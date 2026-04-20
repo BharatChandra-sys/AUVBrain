@@ -33,31 +33,22 @@
         <div class="flow" role="img" aria-label="AUVBrain system data flow">
           <div class="flow-row">
             <div class="node">Sensors / State</div>
-            <div class="arrow">→</div>
             <div class="node">Agent Loop</div>
-            <div class="arrow">→</div>
             <div class="node">Policy (Rules / LLM)</div>
-            <div class="arrow">→</div>
             <div class="node">Safety Monitor</div>
-            <div class="arrow">→</div>
             <div class="node">PID + Mixing</div>
-            <div class="arrow">→</div>
             <div class="node">Thrusters</div>
           </div>
 
           <div class="flow-row">
             <div class="node">Manual Override</div>
-            <div class="arrow">→</div>
             <div class="node">FastAPI + WebSocket</div>
-            <div class="arrow">→</div>
             <div class="node">Agent Loop</div>
           </div>
 
           <div class="flow-row">
             <div class="node">Agent Loop</div>
-            <div class="arrow">→</div>
             <div class="node">Telemetry Writer</div>
-            <div class="arrow">→</div>
             <div class="node">Telemetry Log (JSONL)</div>
           </div>
         </div>
