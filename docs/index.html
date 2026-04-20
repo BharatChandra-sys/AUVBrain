@@ -82,12 +82,12 @@ flowchart LR
 
     <script type="text/plain" id="diagram-tick">
 flowchart TD
-  A[Read sensors and state] --> B[Decide command]
-  B --> C[Safety validate and clip]
-  C --> D[PID compute + thruster mixing]
+  A[Read sensors] --> B[Decide command]
+  B --> C[Safety check]
+  C --> D[Mix thrusters]
   D --> E[Write actuators]
-  E --> F[Enqueue telemetry]
-  F --> G[Sleep to maintain cadence]
+  E --> F[Telemetry]
+  F --> G[Sleep]
     </script>
 
     <script>
