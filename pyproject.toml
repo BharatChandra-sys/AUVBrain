@@ -1,0 +1,52 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "auvbrain"
+version = "0.1.0"
+description = "Autonomous underwater vehicle (AUV) decision engine + control hub (FastAPI)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Your Name"}]
+dependencies = [
+  "fastapi>=0.110",
+  "uvicorn[standard]>=0.27",
+  "pydantic>=2.6",
+  "pydantic-settings>=2.2",
+  "httpx>=0.26",
+]
+
+[project.optional-dependencies]
+raspi = [
+  "gpiozero>=2.0",
+]
+local-llm = [
+  "llama-cpp-python>=0.2.90",
+]
+rag = [
+  "chromadb>=0.5.0",
+]
+
+dev = [
+  "pytest>=8",
+  "ruff>=0.5.0",
+  "matplotlib>=3.8",
+]
+
+[project.scripts]
+auv-api = "auvbrain.api.main:run"
+auv-agent = "auvbrain.agent.main:run"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

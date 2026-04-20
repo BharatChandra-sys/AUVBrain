@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.env
+.telemetry/
+.telemetry_benchmark/
+logs/
+.DS_Store
+.vscode/
+
+# ROS2 build artifacts (if you build nodes here)
+ros2_ws/build/
+ros2_ws/install/
+ros2_ws/log/
