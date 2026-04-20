@@ -37,29 +37,9 @@
 
         <pre class="mermaid">
 flowchart LR
-  subgraph Inputs
-    S[Sensors and State]
-    M[Manual Override (WebSocket)]
-  end
-
-  subgraph Brain[AUVBrain]
-    L[Agent Loop\nobserve -> decide -> act]
-    P[Policy\nRules / LLM / Fallback]
-    K[Safety Monitor\nlimits and kill-switch]
-    X[Control\nPID + 4-motor mixing]
-    T[Telemetry Writer\nnon-blocking JSONL]
-  end
-
-  subgraph Outputs
-    A[Actuators and Thrusters]
-    O[Logs and Telemetry]
-    API[FastAPI Control Hub + WebSocket]
-  end
-
-  S --> L --> P --> K --> X --> A
-  M --> API --> L
-  L --> T --> O
-  API --> O
+  Sensors[Sensors and State] --> Loop[Agent Loop] --> Policy[Policy] --> Safety[Safety Monitor] --> Control[PID + Mixing] --> Thrusters[Thrusters]
+  Manual[Manual Override] --> API[FastAPI + WebSocket] --> Loop
+  Loop --> Tel[Telemetry Writer] --> Log[Telemetry Log]
         </pre>
       </section>
 
@@ -69,25 +49,21 @@ flowchart LR
 sequenceDiagram
   autonumber
   participant Loop as Agent Loop
-  participant HW as Hardware (SIM/RPi)
-  participant Policy as Policy Engine
+  participant HW as Hardware
+  participant Policy as Policy
   participant Safety as Safety Monitor
-  participant Control as PID + Mixing
-  participant Tel as Telemetry Writer
+  participant Control as Control
+  participant Tel as Telemetry
 
-  Loop->>HW: read sensors and state (bounded timeout)
+  Loop->>HW: Read sensors
   Loop->>Policy: decide command (timeout + fallback)
   Policy-->>Loop: VehicleCommand
-  Loop->>Safety: validate and clip (kill-switch)
-  Safety-->>Loop: safe command
-  Loop->>Control: compute thrust outputs
-  Control-->>Loop: 4-motor mix
-  Loop->>HW: write actuators (bounded timeout)
-  par telemetry
-    Loop->>Tel: enqueue telemetry event
-  and
-    Loop-->>Loop: sleep to maintain cadence
-  end
+  Loop->>Safety: Validate and clip
+  Safety-->>Loop: Safe command
+  Loop->>Control: Mix thrusters
+  Control-->>Loop: Outputs
+  Loop->>HW: Write actuators
+  Loop->>Tel: Enqueue telemetry (async)
         </pre>
       </section>
 
