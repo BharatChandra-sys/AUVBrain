@@ -85,21 +85,21 @@ sequenceDiagram
   autonumber
   participant Loop as Agent Loop
   participant HW as Hardware
-  participant Policy as Policy
+  participant Policy as Policy Engine
   participant Safety as Safety Monitor
   participant Control as Control
   participant Tel as Telemetry Writer
 
-  Loop->>HW: Read sensors/state (bounded timeout)
-  Loop->>Policy: Decide command (timeout + fallback)
-  Policy-->>Loop: VehicleCommand
-  Loop->>Safety: Validate/clip (kill-switch)
+  Loop->>HW: Read sensors and state
+  Loop->>Policy: Decide command
+  Policy-->>Loop: Command
+  Loop->>Safety: Validate and clip
   Safety-->>Loop: Safe command
   Loop->>Control: Mix thrusters
   Control-->>Loop: Outputs
-  Loop->>HW: Write actuators (bounded timeout)
-  Loop->>Tel: Enqueue telemetry (non-blocking)
-  Loop-->>Loop: Sleep to maintain cadence
+  Loop->>HW: Write actuators
+  Loop->>Tel: Enqueue telemetry
+  Note over Loop: Sleep to maintain cadence
     </script>
 
     <script>
