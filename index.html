@@ -40,7 +40,7 @@ flowchart LR
   Sensors[Sensors and State] --> Loop[Agent Loop] --> Policy[Policy] --> Safety[Safety Monitor] --> Control[PID + Mixing] --> Thrusters[Thrusters]
   Manual[Manual Override] --> API[FastAPI + WebSocket] --> Loop
   Loop --> Tel[Telemetry Writer] --> Log[Telemetry Log]
-        </pre>
+      </pre>
       </section>
 
       <section>
@@ -64,7 +64,7 @@ sequenceDiagram
   Control-->>Loop: Outputs
   Loop->>HW: Write actuators
   Loop->>Tel: Enqueue telemetry (async)
-        </pre>
+</pre>
       </section>
 
       <section>
