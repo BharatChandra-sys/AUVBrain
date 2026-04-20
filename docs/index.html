@@ -9,6 +9,7 @@
     <meta http-equiv="pragma" content="no-cache" />
     <meta http-equiv="expires" content="0" />
     <meta name="description" content="AUVBrain: low-latency autonomous AUV control loop with safety monitoring, telemetry, and offline-capable LLM policy support. This page shows the data flow and benchmark outputs." />
+    <script src="https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.min.js" defer></script>
   </head>
   <body>
     <header class="container">
@@ -30,40 +31,16 @@
           apply safety constraints, mix thrusters, and emit telemetry asynchronously.
         </p>
 
-        <div class="flow" role="img" aria-label="AUVBrain system data flow">
-          <div class="flow-row">
-            <div class="node">Sensors / State</div>
-            <div class="node">Agent Loop</div>
-            <div class="node">Policy (Rules / LLM)</div>
-            <div class="node">Safety Monitor</div>
-            <div class="node">PID + Mixing</div>
-            <div class="node">Thrusters</div>
-          </div>
-
-          <div class="flow-row">
-            <div class="node">Manual Override</div>
-            <div class="node">FastAPI + WebSocket</div>
-            <div class="node">Agent Loop</div>
-          </div>
-
-          <div class="flow-row">
-            <div class="node">Agent Loop</div>
-            <div class="node">Telemetry Writer</div>
-            <div class="node">Telemetry Log (JSONL)</div>
-          </div>
+        <div class="diagram">
+          <div class="mermaid" data-mermaid-template="diagram-system"></div>
         </div>
       </section>
 
       <section>
         <h2>Tick (Decision) Flow</h2>
-        <ol class="steps">
-          <li>Read sensors/state (bounded timeout).</li>
-          <li>Decide a command (Rules or LLM; timeout + fallback if enabled).</li>
-          <li>Safety monitor validates/clips, and can force SAFE.</li>
-          <li>Control computes thrust and mixes to 4-motor outputs.</li>
-          <li>Write actuators (bounded timeout).</li>
-          <li>Enqueue telemetry (non-blocking) and sleep to maintain cadence.</li>
-        </ol>
+        <div class="diagram">
+          <div class="mermaid" data-mermaid-template="diagram-tick"></div>
+        </div>
       </section>
 
       <section>
@@ -93,8 +70,58 @@ python -m scripts.plot_latency</pre>
     </main>
 
     <footer class="container footer">
-      <p class="muted">Hosted via GitHub Pages.</p>
+      <p class="muted">Rendered with Mermaid. Hosted via GitHub Pages.</p>
     </footer>
+
+    <script type="text/plain" id="diagram-system">
+flowchart LR
+  Sensors["Sensors / State"] --> Loop["Agent Loop"] --> Policy["Policy (Rules / LLM)"] --> Safety["Safety Monitor"] --> Control["PID + Mixing"] --> Thrusters["Thrusters"]
+  Manual["Manual Override"] --> API["FastAPI + WebSocket"] --> Loop
+  Loop --> Tel["Telemetry Writer"] --> Log["Telemetry Log (JSONL)"]
+    </script>
+
+    <script type="text/plain" id="diagram-tick">
+sequenceDiagram
+  autonumber
+  participant Loop as Agent Loop
+  participant HW as Hardware
+  participant Policy as Policy
+  participant Safety as Safety Monitor
+  participant Control as Control
+  participant Tel as Telemetry Writer
+
+  Loop->>HW: Read sensors/state (bounded timeout)
+  Loop->>Policy: Decide command (timeout + fallback)
+  Policy-->>Loop: VehicleCommand
+  Loop->>Safety: Validate/clip (kill-switch)
+  Safety-->>Loop: Safe command
+  Loop->>Control: Mix thrusters
+  Control-->>Loop: Outputs
+  Loop->>HW: Write actuators (bounded timeout)
+  Loop->>Tel: Enqueue telemetry (non-blocking)
+  Loop-->>Loop: Sleep to maintain cadence
+    </script>
+
+    <script>
+      window.addEventListener("DOMContentLoaded", () => {
+        if (!window.mermaid) return;
+
+        mermaid.initialize({ startOnLoad: false, theme: "default" });
+
+        for (const el of document.querySelectorAll(".mermaid[data-mermaid-template]")) {
+          const templateId = el.getAttribute("data-mermaid-template");
+          const template = templateId ? document.getElementById(templateId) : null;
+          if (!template) continue;
+          el.textContent = (template.textContent || "").trim();
+        }
+
+        mermaid
+          .run({ querySelector: ".mermaid" })
+          .catch((e) => {
+            console.warn("Mermaid render failed", e);
+          });
+      });
+    </script>
 
   </body>
 </html>

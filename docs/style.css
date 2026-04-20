@@ -68,6 +68,24 @@ pre.mermaid {
   background: #fafafa;
 }
 
+.diagram {
+  margin: 10px 0 0 0;
+  padding: 14px;
+  border: 1px solid #e6e6e6;
+  border-radius: 10px;
+  background: #fafafa;
+  overflow: auto;
+}
+
+.diagram .mermaid {
+  min-width: 300px;
+}
+
+.diagram svg {
+  max-width: 100%;
+  height: auto;
+}
+
 .flow {
   margin: 10px 0 0 0;
   padding: 14px;
