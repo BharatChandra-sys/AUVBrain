@@ -88,25 +88,13 @@ flowchart LR
     </script>
 
     <script type="text/plain" id="diagram-tick">
-sequenceDiagram
-  autonumber
-  participant Loop as Agent Loop
-  participant HW as Hardware
-  participant Policy as Policy Engine
-  participant Safety as Safety Monitor
-  participant Control as Control
-  participant Tel as Telemetry Writer
-
-  Loop->>HW: Read sensors and state
-  Loop->>Policy: Decide command
-  Policy-->>Loop: Command
-  Loop->>Safety: Validate and clip
-  Safety-->>Loop: Safe command
-  Loop->>Control: Mix thrusters
-  Control-->>Loop: Outputs
-  Loop->>HW: Write actuators
-  Loop->>Tel: Enqueue telemetry
-  Note over Loop: Sleep to maintain cadence
+flowchart TD
+  A[Read sensors and state] --> B[Decide command]
+  B --> C[Safety validate and clip]
+  C --> D[PID compute + thruster mixing]
+  D --> E[Write actuators]
+  E --> F[Enqueue telemetry]
+  F --> G[Sleep to maintain cadence]
     </script>
 
     <script>
