@@ -1,3 +1,12 @@
+"""Decision engines for the AUVBrain agent loop.
+
+Hierarchy
+---------
+  FallbackDecisionEngine
+    ├── primary:  LLMDecisionEngine   (optional)
+    └── fallback: RuleDecisionEngine  (always-on deterministic)
+"""
+
 from __future__ import annotations
 
 import logging
@@ -9,6 +18,7 @@ from ..config import Settings
 from ..llm.ollama_client import OllamaClient
 from ..llm.openai_compat_client import OpenAICompatClient
 from ..llm.prompts import SYSTEM_PROMPT, user_prompt
+from ..metrics.registry import METRICS
 from ..models import DecisionSource, Observation, VehicleCommand
 
 logger = logging.getLogger(__name__)
@@ -27,14 +37,14 @@ class RuleDecisionEngine(DecisionEngine):
     async def decide(self, obs: Observation) -> VehicleCommand:
         cmd = VehicleCommand()
 
-        # Simple obstacle avoid: if close ahead, yaw + stop surge
+        # Emergency obstacle avoidance: stop surge and yaw away
         if obs.obstacle_front_m is not None and obs.obstacle_front_m < 1.0:
             cmd.thrusters.surge = 0.0
             cmd.thrusters.yaw = 0.6
             cmd.note = f"Obstacle {obs.obstacle_front_m:.2f}m: yaw right"
             return cmd
 
-        # Default: slow forward
+        # Default: slow forward cruise
         cmd.thrusters.surge = 0.2
         cmd.note = "Cruise"
         return cmd
@@ -43,8 +53,8 @@ class RuleDecisionEngine(DecisionEngine):
 class LLMDecisionEngine(DecisionEngine):
     source = DecisionSource.LLM
 
-    def __init__(self, settings: Settings):
-        provider = settings.llm_provider.upper().strip()
+    def __init__(self, settings: Settings) -> None:
+        provider = settings.llm_provider
         if provider == "OLLAMA":
             self.client = OllamaClient(
                 settings.ollama_url,
@@ -79,33 +89,32 @@ class LLMDecisionEngine(DecisionEngine):
             await aclose()
 
     async def decide(self, obs: Observation) -> VehicleCommand:
-        # Pydantic's JSON serializer is faster than dict -> json.dumps.
         obs_json = obs.model_dump_json()
         raw = await self.client.chat_json(system=SYSTEM_PROMPT, user=user_prompt(obs_json))
 
-        # Strict parsing: must validate
         try:
             return VehicleCommand.model_validate_json(raw)
         except ValidationError:
-            # Sometimes models wrap JSON in markdown; attempt best-effort extraction.
             cleaned = _extract_json_object(raw)
             if cleaned is None:
                 logger.warning("LLM output not valid JSON: %r", raw[:200])
+                METRICS.inc("llm_failures_total")
                 return VehicleCommand(note="LLM parse fail; SAFE neutral")
             try:
                 return VehicleCommand.model_validate_json(cleaned)
             except ValidationError:
                 logger.warning("LLM output JSON failed schema: %r", cleaned[:200])
+                METRICS.inc("llm_failures_total")
                 return VehicleCommand(note="LLM schema fail; SAFE neutral")
 
 
 class FallbackDecisionEngine(DecisionEngine):
-    """Decision engine that bounds decision latency and degrades gracefully.
+    """Bounds decision latency and degrades gracefully from LLM to Rules.
 
-    Goal: maximize autonomy while bounding worst-case latency.
-    - Primary engine (typically LLM) is attempted first.
-    - If it times out or raises, fall back to a fast deterministic engine.
-    - After repeated failures, enter a cooldown and use fallback directly.
+    - Primary (LLM) is tried first.
+    - On timeout or exception, the deterministic fallback is used.
+    - After ``max_consecutive_failures`` failures, enter a cooldown where
+      the fallback is used directly for ``failure_cooldown_s`` seconds.
     """
 
     def __init__(
@@ -136,6 +145,7 @@ class FallbackDecisionEngine(DecisionEngine):
 
         now = time.monotonic()
         if self._cooldown_s > 0 and now < self._cooldown_until:
+            METRICS.inc("llm_fallbacks_total")
             self.source = self._fallback.source
             return await self._fallback.decide(obs)
 
@@ -147,8 +157,6 @@ class FallbackDecisionEngine(DecisionEngine):
             else:
                 cmd = await self._primary.decide(obs)
 
-            # If the primary is an LLM and it emitted a known "neutral due to parse" command,
-            # treat it as a failure so we can maintain autonomy via the fallback.
             note = cmd.note or ""
             if "LLM parse fail" in note or "LLM schema fail" in note:
                 raise RuntimeError("LLM invalid output")
@@ -157,10 +165,21 @@ class FallbackDecisionEngine(DecisionEngine):
             self.source = self._primary.source
             return cmd
 
-        except Exception:
+        except Exception as exc:
             self._consecutive_failures += 1
+            METRICS.inc("llm_fallbacks_total")
+            logger.warning(
+                "Primary engine failed (consecutive=%d): %s",
+                self._consecutive_failures,
+                exc,
+            )
             if self._consecutive_failures >= self._max_failures and self._cooldown_s > 0:
                 self._cooldown_until = time.monotonic() + self._cooldown_s
+                logger.warning(
+                    "LLM cooldown engaged for %.1fs after %d consecutive failures",
+                    self._cooldown_s,
+                    self._consecutive_failures,
+                )
             self.source = self._fallback.source
             return await self._fallback.decide(obs)
 

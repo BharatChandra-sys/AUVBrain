@@ -1,10 +1,19 @@
+"""Domain models for AUVBrain.
+
+All models use Pydantic v2.  Validators enforce hard limits so that malformed
+operator input can never reach the hardware layer.
+"""
+
 from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Literal, Optional
+from typing import Annotated, Any, Literal, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# ── Current schema version — bump when the command shape changes ──────────
+COMMAND_SCHEMA_VERSION = "1"
 
 
 class DecisionSource(str, Enum):
@@ -21,14 +30,52 @@ class ThrusterCommand(BaseModel):
 
 class ExperimentCommand(BaseModel):
     enabled: bool = False
-    action: Optional[str] = None
+    action: Optional[Annotated[str, Field(max_length=64)]] = None
+    # Bound the free-form params blob: max 16 keys, values are scalar only.
     params: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("params")
+    @classmethod
+    def _bound_params(cls, v: dict) -> dict:
+        if len(v) > 16:
+            raise ValueError("experiment.params may have at most 16 keys")
+        for key, val in v.items():
+            if not isinstance(key, str):
+                raise ValueError("experiment.params keys must be strings")
+            if len(key) > 64:
+                raise ValueError(f"experiment.params key too long: {key!r}")
+            if isinstance(val, (dict, list)):
+                raise ValueError(
+                    f"experiment.params values must be scalars; got {type(val).__name__!r} "
+                    f"for key {key!r}"
+                )
+        return v
 
 
 class VehicleCommand(BaseModel):
+    """Command sent from the decision engine to the hardware layer.
+
+    ``schema_version`` lets the API and hardware detect mismatches without
+    silent failures.
+    """
+
+    schema_version: str = Field(
+        default=COMMAND_SCHEMA_VERSION,
+        description="Schema version token — bump when shape changes",
+    )
     thrusters: ThrusterCommand = Field(default_factory=ThrusterCommand)
     experiment: ExperimentCommand = Field(default_factory=ExperimentCommand)
-    note: Optional[str] = None
+    note: Optional[Annotated[str, Field(max_length=256)]] = None
+
+    @field_validator("schema_version")
+    @classmethod
+    def _validate_schema_version(cls, v: str) -> str:
+        if v != COMMAND_SCHEMA_VERSION:
+            raise ValueError(
+                f"schema_version mismatch: expected {COMMAND_SCHEMA_VERSION!r}, got {v!r}. "
+                "Upgrade your client."
+            )
+        return v
 
 
 class Observation(BaseModel):
@@ -46,7 +93,7 @@ class Observation(BaseModel):
     sonar_ok: Optional[bool] = None
     experiment_ok: Optional[bool] = None
 
-    # distance in meters; None means unavailable
+    # distance in metres; None means unavailable
     obstacle_front_m: Optional[float] = None
 
     # free-form extra sensor readings (pH, salinity, temp, etc.)
