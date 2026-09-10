@@ -26,6 +26,8 @@ dependencies = [
   "aiosqlite>=0.20.0",
   # Auth
   "python-multipart>=0.0.9",
+  # Core math for simulation/navigation
+  "numpy>=1.24.0",
 ]
 
 [project.optional-dependencies]
@@ -49,6 +51,9 @@ dev = [
   "matplotlib>=3.8",
   # Migrations
   "alembic>=1.13.0",
+  # Simulation lab
+  "numpy>=1.24.0",
+  "scipy>=1.10.0",
 ]
 
 [project.scripts]

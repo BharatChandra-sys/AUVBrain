@@ -9,8 +9,10 @@ Hierarchy
 
 from __future__ import annotations
 
+import json
 import logging
 import time
+from typing import TYPE_CHECKING
 
 from pydantic import ValidationError
 
@@ -20,6 +22,9 @@ from ..llm.openai_compat_client import OpenAICompatClient
 from ..llm.prompts import SYSTEM_PROMPT, user_prompt
 from ..metrics.registry import METRICS
 from ..models import DecisionSource, Observation, VehicleCommand
+
+if TYPE_CHECKING:
+    from .tool_registry import ToolRegistry
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +58,8 @@ class RuleDecisionEngine(DecisionEngine):
 class LLMDecisionEngine(DecisionEngine):
     source = DecisionSource.LLM
 
-    def __init__(self, settings: Settings) -> None:
+    def __init__(self, settings: Settings, tool_registry: "ToolRegistry | None" = None) -> None:
+        self.tool_registry = tool_registry
         provider = settings.llm_provider
         if provider == "OLLAMA":
             self.client = OllamaClient(
@@ -90,6 +96,12 @@ class LLMDecisionEngine(DecisionEngine):
 
     async def decide(self, obs: Observation) -> VehicleCommand:
         obs_json = obs.model_dump_json()
+        
+        # If tool registry is available, allow multi-turn tool calls
+        if self.tool_registry is not None:
+            return await self._decide_with_tools(obs_json)
+        
+        # Otherwise fallback to single-shot decision (legacy path)
         raw = await self.client.chat_json(system=SYSTEM_PROMPT, user=user_prompt(obs_json))
 
         try:
@@ -106,6 +118,52 @@ class LLMDecisionEngine(DecisionEngine):
                 logger.warning("LLM output JSON failed schema: %r", cleaned[:200])
                 METRICS.inc("llm_failures_total")
                 return VehicleCommand(note="LLM schema fail; SAFE neutral")
+
+    async def _decide_with_tools(self, obs_json: str) -> VehicleCommand:
+        """Multi-turn decision loop with tool calls.
+        
+        LLM can call tools to gather context before emitting final VehicleCommand.
+        Max 3 tool-call rounds to prevent runaway.
+        """
+        from .tool_registry import build_tool_schema
+        
+        tools_schema = build_tool_schema()
+        system_with_tools = SYSTEM_PROMPT + "\n\n**Available Tools:**\n" + json.dumps(tools_schema, indent=2)
+        
+        context = user_prompt(obs_json)
+        max_rounds = 3
+        
+        for round_idx in range(max_rounds):
+            raw = await self.client.chat_json(system=system_with_tools, user=context)
+            
+            # Try to parse as VehicleCommand first (final decision)
+            try:
+                return VehicleCommand.model_validate_json(raw)
+            except ValidationError:
+                pass
+            
+            # Otherwise check if it's a tool call request
+            try:
+                parsed = json.loads(_extract_json_object(raw) or raw)
+                if isinstance(parsed, dict) and "tool" in parsed and "args" in parsed:
+                    tool_name = parsed["tool"]
+                    tool_args = parsed.get("args", {})
+                    logger.debug("LLM tool call: %s(%s)", tool_name, tool_args)
+                    
+                    result = await self.tool_registry.dispatch(tool_name, tool_args)
+                    context += f"\n\n**Tool Result ({tool_name}):**\n{json.dumps(result, indent=2)}\n\nNow emit final VehicleCommand."
+                    continue
+            except (json.JSONDecodeError, KeyError):
+                pass
+            
+            # If we can't parse it as command or tool call, fail gracefully
+            logger.warning("LLM output not valid after round %d: %r", round_idx, raw[:200])
+            METRICS.inc("llm_failures_total")
+            return VehicleCommand(note="LLM output invalid; SAFE neutral")
+        
+        # Max rounds exceeded
+        logger.warning("LLM tool loop exceeded %d rounds, forcing neutral", max_rounds)
+        return VehicleCommand(note="LLM tool loop timeout; SAFE neutral")
 
 
 class FallbackDecisionEngine(DecisionEngine):

@@ -1,7 +1,8 @@
 """Main agent control loop.
 
 Each tick follows the pattern:
-  read sensors  →  decide command  →  safety check  →  apply actuators  →  telemetry
+  read sensors  →  validate  →  estimate state  →  build world  →  detect faults  →
+  decide command  →  safety shield  →  safety monitor  →  apply actuators  →  telemetry
 
 Key guarantees:
   - Every I/O operation is timeout-bounded.
@@ -21,13 +22,20 @@ import uuid
 from typing import Awaitable, TypeVar
 
 from ..config import Settings
+from ..faults.detector import FaultDetector
 from ..hardware.interfaces import HardwareBundle
 from ..logging_config import correlation_id
 from ..metrics.registry import METRICS
 from ..models import ControlMode, DecisionSource, VehicleCommand
+from ..navigation.estimated_state import EstimatedState
+from ..perception.validator import SensorValidator
+from ..planning.energy import EnergyPlanner, EnergyState
 from ..safety.monitor import SafetyMonitor
 from ..state import STATE
 from ..telemetry.writer import TelemetryWriter
+from ..world.model import WorldStateBuilder
+from .policy import DecisionEngine
+from ..world.model import WorldStateBuilder
 from .policy import DecisionEngine
 
 logger = logging.getLogger(__name__)
@@ -62,11 +70,19 @@ async def agent_loop(
 
     loop = asyncio.get_running_loop()
 
+    # ── Phase 1–9 pipeline components ─────────────────────────────────────
+    validator = SensorValidator()
+    estimator = DeadReckoningEstimator()
+    fault_detector = FaultDetector()
+    energy_planner = EnergyPlanner()
+    world_builder = WorldStateBuilder()
+
     profile = bool(settings.profile_enabled)
     profile_every_n = max(1, int(settings.profile_every_n))
     tick_count = 0
     prev_tick_start: float | None = None
     prev_tick_start_ns: int | None = None
+    prev_tick_time: float | None = None
 
     while True:
         if stop_event is not None and stop_event.is_set():
@@ -125,6 +141,29 @@ async def agent_loop(
 
         if profile:
             t1_ns = time.perf_counter_ns()
+
+        # ── Validate sensors and build estimated state ───────────────────
+        validated_obs = validator.validate(obs)
+        estimated_state = EstimatedState.from_observation(validated_obs, tick_count)
+        observation_confidence = validated_obs.aggregate_confidence()
+        
+        # ── Detect faults ────────────────────────────────────────────────
+        faults = fault_detector.detect(validated_obs, estimated_state)
+        
+        # ── Compute energy state ─────────────────────────────────────────
+        energy_state = energy_planner.compute_state(
+            battery_v=obs.battery_v,
+            mission_distance_m=1000.0,  # TODO: get from mission planner
+        )
+        
+        # ── Assemble WorldState ──────────────────────────────────────────
+        world = world_builder.build(
+            navigation=estimated_state,
+            energy=energy_state,
+            faults=faults,
+            observation_confidence=observation_confidence,
+            tick=tick_count,
+        )
 
         # ── Update gauges ────────────────────────────────────────────────
         METRICS.inc("ticks_total")
@@ -257,6 +296,41 @@ async def agent_loop(
             continue
 
         # ── AUTONOMOUS mode ──────────────────────────────────────────────
+        # Full pipeline: validate → estimate → detect faults → build world → decide
+        
+        if profile:
+            t_validate0_ns = time.perf_counter_ns()
+        
+        # 1. Validate raw sensors
+        dt = (loop.time() - prev_tick_time) if prev_tick_time else 0.1
+        prev_tick_time = loop.time()
+        validated = validator.validate(obs, dt=dt)
+        
+        if profile:
+            t_validate1_ns = time.perf_counter_ns()
+        
+        # 2. Fuse into EstimatedState
+        estimated_state = estimator.update(validated, surge=0.0, sway=0.0, heave=0.0)
+        
+        # 3. Detect faults
+        faults = fault_detector.detect(validated, estimated_state)
+        
+        # 4. Energy state
+        energy_state = EnergyState(
+            soc=max(0.0, min(1.0, (obs.battery_v - 10.5) / (12.6 - 10.5))),
+            voltage=obs.battery_v,
+            current_draw_a=0.5,  # placeholder
+        )
+        
+        # 5. Build WorldState
+        world = world_builder.build(
+            navigation=estimated_state,
+            energy=energy_state,
+            faults=faults,
+            observation_confidence=validated.observation_confidence,
+            tick=tick_count,
+        )
+        
         if profile:
             t_decide0_ns = time.perf_counter_ns()
 
@@ -316,6 +390,7 @@ async def agent_loop(
             "obs": obs,
             "cmd": cmd,
             "source": engine.source.value,
+            "world": world.summary(),
             "tick": tick_count,
             "correlation_id": tick_id,
         })
