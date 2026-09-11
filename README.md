@@ -225,6 +225,47 @@ python scripts/latency_benchmark.py
 python scripts/plot_latency.py
 ```
 
+## Autonomy Pipeline Benchmarks
+
+Comprehensive benchmarks measure the full Phase 1-9 pipeline performance across multiple scenarios:
+
+**Measured components:**
+- Sensor validation (health checks, spike detection, cross-sensor consistency)
+- State estimation (dead-reckoning position integration, confidence tracking)
+- Fault detection (DVL dropout, IMU freeze, depth drift, thruster degradation)
+- World building (obstacles, energy, faults, mission context)
+- Decision engine (Rules/LLM)
+- Action shield (safety validation)
+- End-to-end tick latency
+
+**Test scenarios:**
+- Normal operation (baseline)
+- DVL dropout (navigation sensor failure)
+- Critical battery (energy-constrained planning)
+- Thruster degradation (actuator fault)
+- IMU bias (sensor drift)
+
+**Metrics tracked:**
+- Component latency (P50/P95/P99 percentiles)
+- Throughput (ticks/second)
+- Confidence scores over time
+- Fault detection rate
+- Rule vs LLM decision ratio
+
+Run benchmarks:
+
+```powershell
+pip install -e .[dev]
+python scripts/run_benchmarks.py
+```
+
+Results are saved to `docs/benchmarks/` with:
+- Latency breakdown charts
+- Confidence timelines
+- Throughput comparison
+- Per-scenario detailed analysis
+- JSON data for further analysis
+
 ## GitHub Pages (public flow + outputs)
 
 This repo ships a tiny static site in `docs/` that shows the system flow diagrams and the benchmark outputs.
